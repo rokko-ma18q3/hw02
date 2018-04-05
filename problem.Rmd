@@ -1,0 +1,280 @@
+---
+title: 'hw02: Analyze PWT with R and tidyverse'
+author: |
+  | Kenji Sato
+  | Kobe University
+  | mail@kenjisato.jp
+date: '`r format(Sys.time(), "%Y/%m/%d")`'
+output:
+  bookdown::pdf_document2:
+    fig_caption: yes
+    includes:
+      in_header: asset/latex/custom.sty
+    keep_tex: no
+    latex_engine: pdflatex
+    number_sections: yes
+    template: null
+    toc: no
+  bookdown::html_document2: default
+bibliography: 
+  - asset/bib/R.bib
+  - asset/bib/econ.bib
+documentclass: scrartcl
+---
+
+```{r setup, include=FALSE}
+set.seed(3002)
+```
+
+# Overview
+
+## Purpose {-}
+
+To become familiar with R and **tidyverse** and 
+to play with the Penn World Table [@pwt].
+
+## Instructions {-}
+
+In this assignment, you will
+
+- clone the assignment repository and make a working branch (eg. `solution` branch);
+- solve the problems in Section \@ref(problem); 
+- write the solutions in `solution.Rmd` and knit the file; 
+- commit `solution.Rmd` and `solution.pdf`; and 
+- open a Pull Request.
+ 
+# Set Up
+
+Before you get started, please download the Penn World Table dataset and 
+place it in an appropriate directory. You can use the helper script 
+I provide. Look at the `R` folder, read throught the code in 
+`R/pwt-setup.R` and then execute the following line of code in the console.^[
+`source()` function reads the file (R script) passed as the first argument and 
+executes the R code written in the file. `"R/pwt-setup.R"` is a string that 
+specifies a relative path from your working directory to the file. It assumes
+that there is an `R` folder under the working directory, and a file named 
+`pwt-setup.R` exists in that `R` folder. If you see an error saying "No such
+file or directory," your working directory is different from what I expect or 
+you may have mistakenly removed the file. 
+]
+
+```{r, eval=FALSE}
+source("R/pwt-setup.R")
+```
+
+Now you should have PWT dataset on your computer. To load
+this dataset in R, I would recommend using `haven::read_dta()` 
+function from **haven** package, which comes with **tidyverse**.
+
+```{r}
+pwt <- haven::read_dta("~/Data/pwt90.dta")
+pwt
+```
+
+
+If you see error saying `Error in loadNamespace(name) : there is no package called ‘haven’` in any of your libraries, please install it by running the following code in the console.^[**haven** is a part of 
+the **tidyverse** package family. Notice, however, that `library("tidyverse")` does not load
+**haven** automatically. You need to `library("haven")` separately or call functions 
+in **haven** with the form of `haven::function_name()` like `haven::read_dta()`.]
+
+```{r, eval=FALSE}
+install.packages("tidyverse")
+```
+
+In the following, we assume that **tidyverse** is loaded on memory. Do this:
+
+```{r, message=FALSE}
+library(tidyverse)
+```
+
+
+You might be worried about the disturbing message that tells you there 
+are conflicts of names but you do not have to be.
+
+You see this message because both **dplyr** (loaded with **tidyverse**) 
+and **stats** (loaded at start up) packages have functions with identical names. 
+You can no longer (in this session) use `filter()` function of the **stats**
+package simply with `filter()`, because the name now points to `filter()`
+function defined in the **dplyr** package. It does not mean you can never 
+use the former function; it does mean that you must use it with its full name 
+`stats::filter()`. 
+
+# **dplyr** primer
+
+Table \@ref(tab:pwt90) shows all the variables the table has along with 
+short descriptions for the variables.
+
+```{r, message=FALSE, include=FALSE}
+pwt_vars <- tibble(name = names(pwt), label = NA)
+for (i in seq_along(pwt)) {
+  pwt_vars$label[i] <- attr(pwt[[i]], "label")
+}
+```
+
+
+```{r pwt90, echo = FALSE}
+knitr::kable(pwt_vars, caption = "pwt90.dta")
+```
+
+Often times, we do not need all of these variables for analysis. 
+To trim away unnecessary data, we will make use of **dplyr**, a package for 
+data processing, which comes with **tidyverse**.
+
+Since `pwt90` is too big to learn programming concepts with, let's make a 
+smaller toy dataset with `tibble()`.^[`tibble` or `tbl_df` is an extension 
+of `data.frame` of base R. Run `vignette("tibble")` for more information.]
+
+```{r}
+tbl <- tibble(
+  id = letters[1:4],
+  salary = 400 + rnorm(4, 0, 50),
+  sex = c("M", "M", "F", "F")
+)
+tbl
+```
+
+## `filter`
+
+`filter()` can be used to take rows that satisfy certain conditions. To retrieve 
+rows with `salary` more than `400`, you can use the below code.
+
+```{r}
+filter(tbl, salary > 400)
+```
+
+To retrieve rows that `sex` is `"M"`,
+
+```{r}
+filter(tbl, sex == "M")
+```
+
+To get rows that `sex` is `"M"` and `salary` is more than `400`,
+
+```{r}
+filter(tbl, sex == "M" & salary > 400)
+```
+
+To get rows that `sex` is `"F"` or `salary` is less than or equal to`400`,
+
+```{r}
+filter(tbl, sex == "F" | salary <= 400)
+```
+
+
+## `select`
+
+To choose clumns, use `select`.
+
+```{r}
+select(tbl, id, salary)
+```
+
+You can remove columns by appending negative sign.
+
+```{r}
+select(tbl, - salary)
+```
+
+## `mutate` and `transmute`
+
+To manipulate data in columns, use `mutate` or `transmute`.
+
+`mutate` adds new columns. Let's suppose that `salary` is measured in million yen unit 
+and that we want to change the unit to thousand yen. This is achieved with the 
+following code.
+
+```{r}
+mutate(tbl, salary_in_thousand = 1000 * salary)
+```
+
+`transmute` removes all variable other than those explicitly specified.
+
+```{r}
+transmute(tbl, id, salary_in_thousand = 1000 * salary)
+```
+
+## `%>%`
+
+You can combine the above functions (and many others) with pipe operator `%>%` 
+from **magrittr** package, on which **dplyr** depends. 
+
+Let's see an example.
+
+```{r}
+tbl %>% 
+  filter(salary > 400) %>% 
+  select(id, sex)
+```
+
+This is equivalent to the following.
+
+```{r}
+tbl_tmp <- filter(tbl, salary > 400)
+select(tbl_tmp, id, sex)
+```
+
+Piping makes a chain of commands look much neater.
+
+
+## `group_by` and `aggregate`
+
+Another operation we might want to perform is to compute group-wise
+statistics. The following code computes the ration of the highest salary
+to the lowest within each of male and female groups. 
+
+```{r}
+tbl %>% 
+  group_by(sex) %>% 
+  summarise(mean = max(salary) / min(salary))
+```
+
+
+# PWT and plotting with **ggplot2**
+
+Now is the time to work with PWT. Let's focus on the following ten countries.
+
+```{r}
+countries <- c("United States", "United Kingdom", "Germany", "France", 
+               "Italy", "Japan", "Canada", "China", "Republic of Korea", "India")
+```
+
+We extract `country`, `year`, `rgdpo`, `pop`.
+
+
+```{r}
+pwt10 <- 
+  pwt %>% 
+  filter(country %in% countries) %>% 
+  select(country, year, rgdpo, pop)
+pwt10
+```
+
+
+To visualize the GDP growth of these countries, we use **ggplot2** package, 
+which again comes with **tidyverse**. The following code produces Figure \@ref(fig:rgdp).
+
+```{r rgdp, fig.cap="Real GDP"}
+ggplot(pwt10) + geom_line(aes(x = year, y = rgdpo, color = country))
+```
+
+The following code produces Figure \@ref(fig:logrgdp). 
+The graphs show roughly constant growth of log real GDP. 
+
+```{r logrgdp, fig.cap="Real GDP on log scale"}
+ggplot(pwt10) + geom_line(aes(x = year, y = rgdpo, color = country)) + 
+  scale_y_log10()
+```
+
+# Problem
+
+Consider the period between 1960 and 2014. Compute the 
+average annual real GDP growth rates for these countries 
+chosen earlier. Which country did grow the fastest?
+
+How about the growth rates for real GDP per capita?
+
+Write your answer along with code in `solution.Rmd`, knit it, and submit 
+through a PR.
+
+# References {-}
+
