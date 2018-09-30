@@ -1,7 +1,6 @@
-# hw02: Macroeconomics MA18Q1
+# hw02: Macroeconomics MA18Q3
 
-Publish: 2018-04-06
-Suggested Deadline: 2018-04-20
+Suggested Deadline: 2018-10-16
 
 ## Goal
 
